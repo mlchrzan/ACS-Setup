@@ -5,13 +5,110 @@ format: html
 editor: visual
 ---
 
-# Setup
+# File Setup
 
 ```{r libraries, message=FALSE}
 library(tidyverse) 
 library(janitor) #clean_names()
 ```
 
-```{r load-in-data}
+```{r load-in-data, message=FALSE}
+social_16_20 <- read_csv("./Data/2016-2020/social 2016-2020.csv")
+econ_16_20 <- read_csv("./Data/2016-2020/econ 16-20.csv")
+demo_16_20 <- read_csv("./Data/2016-2020/demographic 16-20.csv")
+housing_16_20 <- read_csv("./Data/2016-2020/housing 16-20.csv")
+varnames_16_20 <- read_csv("./Data/2016-2020/varnames 16-20.csv")
+```
 
+# Clean the Files
+
+```{r clean-varnames}
+varnames_16_20_clean <- varnames_16_20 |> 
+  select(-denominator) |> 
+  mutate(value = 1) |> 
+  pivot_wider(names_from = vlabel, 
+              values_from = value) |> 
+  clean_names() |> 
+  pivot_longer(cols = -varname, 
+               names_to = "label", 
+               values_to = 'value') |>
+  filter(value == 1) |> 
+  select(-value) |> 
+  mutate(label = str_replace(label, "number", "n"), 
+         label = str_replace(label, "estimate", "est"),
+         label = str_replace(label, "percent", "pct"),
+         label = str_replace(label, "margin_of_error", "moe")) |> 
+  filter(!str_detect(varname, "DP02PR"))
+
+varnames_16_20_clean
+```
+
+```{r join-ACS-estimates}
+all_16_20 <- left_join(social_16_20, 
+          housing_16_20, 
+          by = join_by(GeoId, Geography, LEAID, Year, Iteration)) |> 
+  left_join(econ_16_20, 
+          by = join_by(GeoId, Geography, LEAID, Year, Iteration)) |> 
+  left_join(demo_16_20, 
+          by = join_by(GeoId, Geography, LEAID, Year, Iteration))
+
+all_16_20
+```
+
+```{r clean-and-pivot-acs-estimates}
+all_16_20_long <- all_16_20 |>
+  mutate(across(starts_with("DP0"), 
+                ~if_else(. %in% c('N', 
+                                  '(X)', 
+                                  '-', 
+                                  '******', 
+                                  '***', 
+                                  '**'), 
+                         NA, 
+                         as.numeric(.)))) |>
+  mutate(across(starts_with("DP0"), as.numeric)) |> 
+  pivot_longer(cols = starts_with("DP0"),
+               names_to = 'varname',
+               values_to = 'values')
+
+all_16_20_long
+```
+
+```{r join-varnames}
+all_16_20_varnames <- right_join(all_16_20_long, 
+                                 varnames_16_20_clean, 
+                                 by = join_by(varname)) 
+
+all_16_20_varnames
+```
+
+```{r pivot-wide}
+all_16_20_final <- all_16_20_varnames |> 
+  select(-varname) |> 
+  pivot_wider(names_from = label, 
+              values_from = values) 
+
+all_16_20_final
+
+all_16_20_varnames |>
+  dplyr::summarise(n = dplyr::n(), .by = c(GeoId, Geography, LEAID, Year, Iteration, label)) |>
+  dplyr::filter(n > 1L)
+
+#Clean Environment
+#rm(social16_20_long, social16_20, layout16_20_dp02, layouts16_20_corrected, layouts16_20)
+```
+
+```{r prep-and-export}
+all_16_20_final <- all_16_20_final |> 
+  rename(agency_id = LEAID, 
+         agency_name = Geography, 
+         acs_est_span = Year) |>
+  mutate(start_year = as.integer(str_extract(acs_est_span, "^\\d{4}")), 
+         end_year = as.integer(str_extract(acs_est_span, "\\d{4}$")), 
+         year = (start_year + end_year) %/% 2) |> 
+  select(year, agency_id, agency_name, everything(), -Iteration)
+
+all_16_20_final
+
+write_csv(all_16_20_final, "acs_16_20.csv")
 ```
