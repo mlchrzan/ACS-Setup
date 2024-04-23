@@ -101,7 +101,7 @@ all_16_20_varnames <- all_16_20_varnames |>
 all_16_20_varnames
 ```
 
-```{r fix-duplicate-varnames}
+```{r check-duplicate-varnames}
 n_distinct(all_16_20_varnames$varname)
 n_distinct(all_16_20_varnames$label)
 #Indicates that there are 15 variables that have the same name
@@ -145,13 +145,9 @@ varnames_16_20 |>
   filter(varname %in% all_dups$varname) |> 
   arrange(vlabel)
 #Doesn't appear to be an issue
+```
 
-
-#filtered_tibble <- 
-#all_dups %>%
-#  filter(row_number() %% 2 == 0)
-
-
+```{r fix-duplicated-rows}
 #Number of Rows with Duplicated variable names = 29,520 (/2 = 14,760)
 all_16_20_varnames |>
   dplyr::mutate(dups = n() - 1, 
@@ -182,25 +178,22 @@ test <- all_16_20_varnames |>
 
 nrow(all_16_20_varnames) - nrow(test)
 #We do lose the correct number of rows!
+##Also, note, the Iteration and varname columns are removed here as well!
 
 
 #Check that the number of distinct labels hasn't changed
 n_distinct(all_16_20_varnames$label) == n_distinct(test$label)
 
 #Assign
-all_16_20_varnames <- test
+all_16_20_varnames <- test |> select(-dups)
 ```
 
 ```{r pivot-wide}
 all_16_20_final <- all_16_20_varnames |> 
-  select(-varname) |> 
   pivot_wider(names_from = label, 
               values_from = values) 
 
 all_16_20_final
-
-#Clean Environment
-#rm(social16_20_long, social16_20, layout16_20_dp02, layouts16_20_corrected, layouts16_20)
 ```
 
 ```{r prep-and-export}
@@ -211,7 +204,7 @@ all_16_20_final <- all_16_20_final |>
   mutate(start_year = as.integer(str_extract(acs_est_span, "^\\d{4}")), 
          end_year = as.integer(str_extract(acs_est_span, "\\d{4}$")), 
          year = (start_year + end_year) %/% 2) |> 
-  select(year, agency_id, agency_name, everything(), -Iteration)
+  select(year, acs_est_span, agency_id, agency_name, everything())
 
 all_16_20_final
 
