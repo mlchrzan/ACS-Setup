@@ -82,6 +82,115 @@ all_16_20_varnames <- right_join(all_16_20_long,
 all_16_20_varnames
 ```
 
+```{r check-for-listed-but-not-collected-vars}
+anti_join(all_16_20_varnames, all_16_20_long, 
+          by = join_by(GeoId, Geography, LEAID, Year, Iteration, varname, values))
+
+#Will give an error if we seach for those two variables
+# all_16_20 |> 
+#   select(DP05_86est, DP05_86moe)
+```
+
+![](images/clipboard-481330027.png)
+
+```{r remove-empty-rows}
+#Remove those two from all_16_20_varnames
+all_16_20_varnames <- all_16_20_varnames |> 
+  filter(varname != "DP05_86est" & varname != "DP05_86moe")
+
+all_16_20_varnames
+```
+
+```{r fix-duplicate-varnames}
+n_distinct(all_16_20_varnames$varname)
+n_distinct(all_16_20_varnames$label)
+#Indicates that there are 15 variables that have the same name
+
+#Identifying the variables
+dup_varnames <- all_16_20_varnames |>
+  dplyr::summarise(n = n(), 
+                   .by = c(GeoId, 
+                           Geography, 
+                           LEAID, 
+                           Year,
+                           label)) |>
+  dplyr::filter(n > 1L)
+
+dup_varnames <- unique(dup_varnames$label)
+
+dup_varnames
+
+#Idenitfy the 'DP0...' labels of the duplicates
+all_16_20_varnames |> 
+  filter(LEAID == "601620", 
+         label %in% dup_varnames) |> 
+  arrange(label) |> 
+  select(varname, values, label)
+
+#The names do seem to be (mostly) duplicates with the same values, 
+#so we'll filter to just one copy of each (and take average of the differing)
+
+#Get varnames to remove
+all_dups <- all_16_20_varnames |> 
+  filter(LEAID == "601620", 
+         label %in% dup_varnames) |> 
+  arrange(label) |> 
+  select(varname, label) 
+
+all_dups
+
+#UH OH! IS THIS AN ISSUE OF SOME OF THE NAMES BEING CUT FOR LENGTH??
+#Check
+varnames_16_20 |> 
+  filter(varname %in% all_dups$varname) |> 
+  arrange(vlabel)
+#Doesn't appear to be an issue
+
+
+#filtered_tibble <- 
+#all_dups %>%
+#  filter(row_number() %% 2 == 0)
+
+
+#Number of Rows with Duplicated variable names = 29,520 (/2 = 14,760)
+all_16_20_varnames |>
+  dplyr::mutate(dups = n() - 1, 
+                .by = c(GeoId, 
+                        Geography, 
+                        LEAID, 
+                        Year,
+                        label)) |> 
+  filter(dups > 0)
+
+#Summarizing over duplicated variable names (should lose 14,760 rows)
+test <- all_16_20_varnames |>
+  dplyr::mutate(dups = n() - 1, 
+                .by = c(GeoId, 
+                        Geography, 
+                        LEAID, 
+                        Year,
+                        label)) |>
+  group_by(GeoId, 
+           Geography, 
+           LEAID, 
+           Year,
+           label, 
+           dups) |>
+  summarize(values = mean(values, na.rm = T), 
+            .groups = 'keep') |> 
+  ungroup()
+
+nrow(all_16_20_varnames) - nrow(test)
+#We do lose the correct number of rows!
+
+
+#Check that the number of distinct labels hasn't changed
+n_distinct(all_16_20_varnames$label) == n_distinct(test$label)
+
+#Assign
+all_16_20_varnames <- test
+```
+
 ```{r pivot-wide}
 all_16_20_final <- all_16_20_varnames |> 
   select(-varname) |> 
@@ -89,10 +198,6 @@ all_16_20_final <- all_16_20_varnames |>
               values_from = values) 
 
 all_16_20_final
-
-all_16_20_varnames |>
-  dplyr::summarise(n = dplyr::n(), .by = c(GeoId, Geography, LEAID, Year, Iteration, label)) |>
-  dplyr::filter(n > 1L)
 
 #Clean Environment
 #rm(social16_20_long, social16_20, layout16_20_dp02, layouts16_20_corrected, layouts16_20)
