@@ -1,6 +1,6 @@
 ---
-title: "ACS Setup"
-author: "MLC"
+title: "Started Code - Older Years"
+author: "mlc"
 format: html
 editor: visual
 ---
@@ -13,25 +13,37 @@ library(janitor) #clean_names()
 ```
 
 ```{r load-in-data, message=FALSE}
-social_16_20 <- read_csv("./Data/2016-2020/social 2016-2020.csv")
-econ_16_20 <- read_csv("./Data/2016-2020/econ 16-20.csv")
-demo_16_20 <- read_csv("./Data/2016-2020/demographic 16-20.csv")
-housing_16_20 <- read_csv("./Data/2016-2020/housing 16-20.csv")
-varnames_16_20 <- read_csv("./Data/2016-2020/varnames 16-20.csv")
+social <- read_csv("./Data/2015-2019/social 15-19.csv")
+econ <- read_csv("./Data/2015-2019/econ 15-19.csv")
+demo <- read_csv("./Data/2015-2019/demographic 15-19.csv")
+housing <- read_csv("./Data/2015-2019/housing 15-19.csv")
 
-#Older Year Formats
-social_14_18 <- read_csv("./Data/2016-2020/social 2016-2020.csv")
-econ_14_18 <- read_csv("./Data/2016-2020/econ 16-20.csv")
-demo_14_18 <- read_csv("./Data/2016-2020/demographic 16-20.csv")
-housing_14_18 <- read_csv("./Data/2016-2020/housing 16-20.csv")
-varnames_14_18 <- read_csv("./Data/2016-2020/varnames 16-20.csv")
+dp02 <- read_csv("./Data/2014-2018/dp02 layouts.csv")
+dp03 <- read_csv("./Data/2014-2018/dp03 layouts.csv")
+dp04 <- read_csv("./Data/2014-2018/dp04 layouts.csv")
+dp05 <- read_csv("./Data/2014-2018/dp05 layouts.csv")
+
+#J&A, ignore this
+varnames <- read_csv("./Data/2015-2019/varnames 15-19.csv")
+varnames <- varnames |> select(-denominator)
 ```
 
 # Clean the Files
 
+```{r join-varnames}
+varnames <- bind_rows(dp02, dp03, dp04, dp05) 
+
+varnames <- varnames |> 
+  rename(varname = "Variable name", 
+         vlabel = 'Description') |> 
+  select(-Denominator) |> 
+  filter(str_detect(varname, 'DP0'))
+
+varnames
+```
+
 ```{r clean-varnames}
-varnames_16_20_clean <- varnames_16_20 |> 
-  select(-denominator) |> 
+varnames_clean <- varnames |> 
   mutate(value = 1) |> 
   pivot_wider(names_from = vlabel, 
               values_from = value) |> 
@@ -47,23 +59,23 @@ varnames_16_20_clean <- varnames_16_20 |>
          label = str_replace(label, "margin_of_error", "moe")) |> 
   filter(!str_detect(varname, "DP02PR"))
 
-varnames_16_20_clean
+varnames_clean
 ```
 
 ```{r join-ACS-estimates}
-all_16_20 <- left_join(social_16_20, 
-          housing_16_20, 
+all <- left_join(social, 
+          housing, 
           by = join_by(GeoId, Geography, LEAID, Year, Iteration)) |> 
-  left_join(econ_16_20, 
+  left_join(econ, 
           by = join_by(GeoId, Geography, LEAID, Year, Iteration)) |> 
-  left_join(demo_16_20, 
+  left_join(demo, 
           by = join_by(GeoId, Geography, LEAID, Year, Iteration))
 
-all_16_20
+all
 ```
 
 ```{r clean-and-pivot-acs-estimates}
-all_16_20_long <- all_16_20 |>
+all_long <- all |>
   mutate(across(starts_with("DP0"), 
                 ~if_else(. %in% c('N', 
                                   '(X)', 
@@ -78,19 +90,19 @@ all_16_20_long <- all_16_20 |>
                names_to = 'varname',
                values_to = 'values')
 
-all_16_20_long
+all_long
 ```
 
 ```{r join-varnames}
-all_16_20_varnames <- right_join(all_16_20_long, 
-                                 varnames_16_20_clean, 
-                                 by = join_by(varname)) 
+all_varnames <- right_join(all_long, 
+                           varnames_clean, 
+                           by = join_by(varname)) 
 
-all_16_20_varnames
+all_varnames
 ```
 
 ```{r check-for-listed-but-not-collected-vars}
-anti_join(all_16_20_varnames, all_16_20_long, 
+anti_join(all_varnames, all_long, 
           by = join_by(GeoId, Geography, LEAID, Year, Iteration, varname, values))
 
 #Will give an error if we seach for those two variables
@@ -102,19 +114,19 @@ anti_join(all_16_20_varnames, all_16_20_long,
 
 ```{r remove-empty-rows}
 #Remove those two from all_16_20_varnames
-all_16_20_varnames <- all_16_20_varnames |> 
+all_varnames <- all_varnames |> 
   filter(varname != "DP05_86est" & varname != "DP05_86moe")
 
-all_16_20_varnames
+all_varnames
 ```
 
 ```{r check-duplicate-varnames}
-n_distinct(all_16_20_varnames$varname)
-n_distinct(all_16_20_varnames$label)
+n_distinct(all_varnames$varname)
+n_distinct(all_varnames$label)
 #Indicates that there are 15 variables that have the same name
 
 #Identifying the variables
-dup_varnames <- all_16_20_varnames |>
+dup_varnames <- all_varnames |>
   dplyr::summarise(n = n(), 
                    .by = c(GeoId, 
                            Geography, 
@@ -128,7 +140,7 @@ dup_varnames <- unique(dup_varnames$label)
 dup_varnames
 
 #Idenitfy the 'DP0...' labels of the duplicates
-all_16_20_varnames |> 
+all_varnames |> 
   filter(LEAID == "601620", 
          label %in% dup_varnames) |> 
   arrange(label) |> 
@@ -138,7 +150,7 @@ all_16_20_varnames |>
 #so we'll filter to just one copy of each (and take average of the differing)
 
 #Get varnames to remove
-all_dups <- all_16_20_varnames |> 
+all_dups <- all_varnames |> 
   filter(LEAID == "601620", 
          label %in% dup_varnames) |> 
   arrange(label) |> 
@@ -148,7 +160,7 @@ all_dups
 
 #UH OH! IS THIS AN ISSUE OF SOME OF THE NAMES BEING CUT FOR LENGTH??
 #Check
-varnames_16_20 |> 
+varnames |> 
   filter(varname %in% all_dups$varname) |> 
   arrange(vlabel)
 #Doesn't appear to be an issue
@@ -156,7 +168,7 @@ varnames_16_20 |>
 
 ```{r fix-duplicated-rows}
 #Number of Rows with Duplicated variable names = 29,520 (/2 = 14,760)
-all_16_20_varnames |>
+all_varnames |>
   dplyr::mutate(dups = n() - 1, 
                 .by = c(GeoId, 
                         Geography, 
@@ -166,7 +178,7 @@ all_16_20_varnames |>
   filter(dups > 0)
 
 #Summarizing over duplicated variable names (should lose 14,760 rows)
-test <- all_16_20_varnames |>
+test <- all_varnames |>
   dplyr::mutate(dups = n() - 1, 
                 .by = c(GeoId, 
                         Geography, 
@@ -183,28 +195,28 @@ test <- all_16_20_varnames |>
             .groups = 'keep') |> 
   ungroup()
 
-nrow(all_16_20_varnames) - nrow(test)
+nrow(all_varnames) - nrow(test)
 #We do lose the correct number of rows!
 ##Also, note, the Iteration and varname columns are removed here as well!
 
 
 #Check that the number of distinct labels hasn't changed
-n_distinct(all_16_20_varnames$label) == n_distinct(test$label)
+n_distinct(all_varnames$label) == n_distinct(test$label)
 
 #Assign
-all_16_20_varnames <- test |> select(-dups)
+all_varnames <- test |> select(-dups)
 ```
 
 ```{r pivot-wide}
-all_16_20_final <- all_16_20_varnames |> 
+all_final <- all_varnames |> 
   pivot_wider(names_from = label, 
               values_from = values) 
 
-all_16_20_final
+all_final
 ```
 
 ```{r prep-and-export}
-all_16_20_final <- all_16_20_final |> 
+all_final <- all_final |> 
   rename(agency_id = LEAID, 
          agency_name = Geography, 
          acs_est_span = Year) |>
@@ -213,7 +225,7 @@ all_16_20_final <- all_16_20_final |>
          year = (start_year + end_year) %/% 2) |> 
   select(year, acs_est_span, agency_id, agency_name, everything())
 
-all_16_20_final
+all_final
 
-write_csv(all_16_20_final, "acs_16_20.csv")
+write_csv(all_final, "acs_15_19.csv")
 ```
