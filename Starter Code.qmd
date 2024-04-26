@@ -18,13 +18,6 @@ econ_16_20 <- read_csv("./Data/2016-2020/econ 16-20.csv")
 demo_16_20 <- read_csv("./Data/2016-2020/demographic 16-20.csv")
 housing_16_20 <- read_csv("./Data/2016-2020/housing 16-20.csv")
 varnames_16_20 <- read_csv("./Data/2016-2020/varnames 16-20.csv")
-
-#Older Year Formats
-social_14_18 <- read_csv("./Data/2016-2020/social 2016-2020.csv")
-econ_14_18 <- read_csv("./Data/2016-2020/econ 16-20.csv")
-demo_14_18 <- read_csv("./Data/2016-2020/demographic 16-20.csv")
-housing_14_18 <- read_csv("./Data/2016-2020/housing 16-20.csv")
-varnames_14_18 <- read_csv("./Data/2016-2020/varnames 16-20.csv")
 ```
 
 # Clean the Files
