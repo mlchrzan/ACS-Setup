@@ -1,46 +1,89 @@
 ---
-title: "Started Code - Older Years"
+title: "National Data"
 author: "mlc"
 format: html
 editor: visual
 ---
 
-# File Setup
+# Set Up
 
 ```{r libraries, message=FALSE}
 library(tidyverse) 
 library(janitor) #clean_names()
+library(beepr) #sound for knowing code is done
+
+rm(list = ls()) #clear the environment
 ```
 
-```{r load-in-data, message=FALSE}
-social <- read_csv("./Data/2013-2017/social 13-17.csv")
-econ <- read_csv("./Data/2013-2017/econ 13-17.csv")
-demo <- read_csv("./Data/2013-2017/demographic 13-17.csv")
-housing <- read_csv("./Data/2013-2017/housing 13-17.csv")
+## Pull and Join National Data
 
-dp02 <- read_csv("./Data/2013-2017/dp02 layout 13-17.csv")
-dp03 <- read_csv("./Data/2013-2017/dp03 layout 13-17.csv")
-dp04 <- read_csv("./Data/2013-2017/dp04 layout 13-17.csv")
-dp05 <- read_csv("./Data/2013-2017/dp05 layout 13-17.csv")
+```{r convert-txt-csv, message=FALSE, warning=FALSE}
+# Read the .txt file
+dp02 <- read_delim("./National Dist Data/2014-2018/all dist DP02 14-18.txt", 
+                   col_names = T)
 
-#J&A, ignore this
+dp03 <- read_delim("./National Dist Data/2014-2018/all dist DP03 14-18.txt", 
+                   col_names = T)
+
+dp04 <- read_delim("./National Dist Data/2014-2018/all dist DP04 14-18.txt", 
+                   col_names = T)
+
+dp05 <- read_delim("./National Dist Data/2014-2018/all dist DP05 14-18.txt", 
+                   col_names = T)
+
+# Write the data to a .csv file
+write_csv(dp02, "./National Dist Data/2014-2018/all dist conv DP02 14-18.csv")
+write_csv(dp03, "./National Dist Data/2014-2018/all dist conv DP03 14-18.csv")
+write_csv(dp04, "./National Dist Data/2014-2018/all dist conv DP04 14-18.csv")
+write_csv(dp05, "./National Dist Data/2014-2018/all dist conv DP05 14-18.csv")
+```
+
+```{r load-data, message=FALSE}
+# Load Estimates for the National Set of Districts
+social <- read_csv("./National Dist Data/2014-2018/all dist conv DP02 14-18.csv")
+econ <- read_csv("./National Dist Data/2014-2018/all dist conv DP03 14-18.csv")
+housing <- read_csv("./National Dist Data/2014-2018/all dist conv DP04 14-18.csv")
+demo <- read_csv("./National Dist Data/2014-2018/all dist conv DP05 14-18.csv")
+
+# Load Variable Names
+dp02 <- read_csv("./Data/2014-2018/dp02 layout 14-18.csv")
+dp03 <- read_csv("./Data/2014-2018/dp03 layout 14-18.csv")
+dp04 <- read_csv("./Data/2014-2018/dp04 layout 14-18.csv")
+dp05 <- read_csv("./Data/2014-2018/dp05 layout 14-18.csv")
+
+#J&A, ignore this -------------------------------------------
 #varnames <- read_csv("./Data/2015-2019/varnames 15-19.csv")
+#varnames <- read_csv("./Data/2016-2020/varnames 16-20.csv")
 #varnames <- varnames |> select(-denominator)
 ```
 
-# Clean the Files
+```{r join-ACS-estimates}
+all <- full_join(social, 
+          housing, 
+          by = join_by(GeoId, Geography, LEAID, Year, Iteration)) |> 
+  full_join(econ, 
+          by = join_by(GeoId, Geography, LEAID, Year, Iteration)) |> 
+  full_join(demo, 
+          by = join_by(GeoId, Geography, LEAID, Year, Iteration))
+
+all
+```
 
 ```{r join-varnames}
-varnames <- bind_rows(dp02, dp03, dp04, dp05) 
-
-varnames <- varnames |> 
-  rename(varname = "Variable name", 
-         vlabel = 'Description') |> 
-  select(-Denominator) |> 
-  filter(str_detect(varname, 'DP0'))
+if(!exists("varnames")){
+  varnames <- bind_rows(dp02, dp03, dp04, dp05) 
+  
+  varnames <- varnames |> 
+    rename(varname = "Variable name", 
+           vlabel = 'Description') |> 
+    select(-Denominator) |> 
+    filter(str_detect(varname, 'DP0'))
+}
 
 varnames
 ```
+
+# Clean the Files
 
 ```{r clean-varnames}
 varnames_clean <- varnames |> 
@@ -62,19 +105,7 @@ varnames_clean <- varnames |>
 varnames_clean
 ```
 
-```{r join-ACS-estimates}
-all <- left_join(social, 
-          housing, 
-          by = join_by(GeoId, Geography, LEAID, Year, Iteration)) |> 
-  left_join(econ, 
-          by = join_by(GeoId, Geography, LEAID, Year, Iteration)) |> 
-  left_join(demo, 
-          by = join_by(GeoId, Geography, LEAID, Year, Iteration))
-
-all
-```
-
-```{r clean-and-pivot-acs-estimates}
+```{r clean-and-pivot-acs-estimates, warning=FALSE}
 all_long <- all |>
   mutate(across(starts_with("DP0"), 
                 ~if_else(. %in% c('N', 
@@ -93,6 +124,8 @@ all_long <- all |>
 all_long
 ```
 
+# Change Variable Names
+
 ```{r join-varnames}
 all_varnames <- right_join(all_long, 
                            varnames_clean, 
@@ -105,17 +138,14 @@ all_varnames
 anti_join(all_varnames, all_long, 
           by = join_by(GeoId, Geography, LEAID, Year, Iteration, varname, values))
 
-#Will give an error if we seach for those two variables
-# all_16_20 |> 
-#   select(DP05_86est, DP05_86moe)
 ```
 
-![](images/clipboard-481330027.png)
-
 ```{r remove-empty-rows}
-#Remove those two from all_16_20_varnames
+#Remove any variables listed above by adding & varname != "{variable name}" for each variable listed above
+
 all_varnames <- all_varnames |> 
-  filter(varname != "DP05_86est" & varname != "DP05_86moe")
+  filter(varname != "DP05_86est" & 
+           varname != "DP05_86moe")
 
 all_varnames
 ```
@@ -138,36 +168,10 @@ dup_varnames <- all_varnames |>
 dup_varnames <- unique(dup_varnames$label)
 
 dup_varnames
-
-#Idenitfy the 'DP0...' labels of the duplicates
-all_varnames |> 
-  filter(LEAID == "601620", 
-         label %in% dup_varnames) |> 
-  arrange(label) |> 
-  select(varname, values, label)
-
-#The names do seem to be (mostly) duplicates with the same values, 
-#so we'll filter to just one copy of each (and take average of the differing)
-
-#Get varnames to remove
-all_dups <- all_varnames |> 
-  filter(LEAID == "601620", 
-         label %in% dup_varnames) |> 
-  arrange(label) |> 
-  select(varname, label) 
-
-all_dups
-
-#UH OH! IS THIS AN ISSUE OF SOME OF THE NAMES BEING CUT FOR LENGTH??
-#Check
-varnames |> 
-  filter(varname %in% all_dups$varname) |> 
-  arrange(vlabel)
-#Doesn't appear to be an issue
 ```
 
 ```{r fix-duplicated-rows}
-#Number of Rows with Duplicated variable names = 29,520 (/2 = 14,760)
+#Number of Rows with Duplicated variable names = 29,520 (/2 = 14,760) for 16-20
 all_varnames |>
   dplyr::mutate(dups = n() - 1, 
                 .by = c(GeoId, 
@@ -177,7 +181,7 @@ all_varnames |>
                         label)) |> 
   filter(dups > 0)
 
-#Summarizing over duplicated variable names (should lose 14,760 rows)
+#Summarizing over duplicated variable names (should lose 14,760 rows) for 16-20
 test <- all_varnames |>
   dplyr::mutate(dups = n() - 1, 
                 .by = c(GeoId, 
@@ -195,6 +199,7 @@ test <- all_varnames |>
             .groups = 'keep') |> 
   ungroup()
 
+#Check rows removed
 nrow(all_varnames) - nrow(test)
 #We do lose the correct number of rows!
 ##Also, note, the Iteration and varname columns are removed here as well!
@@ -202,6 +207,7 @@ nrow(all_varnames) - nrow(test)
 
 #Check that the number of distinct labels hasn't changed
 n_distinct(all_varnames$label) == n_distinct(test$label)
+
 
 #Assign
 all_varnames <- test |> select(-dups)
@@ -227,5 +233,6 @@ all_final <- all_final |>
 
 all_final
 
-write_csv(all_final, "acs_13_17.csv")
+write_csv(all_final, "./National Dist Data/2014-2018/acs_all_dist_14_18.csv")
+beep(8)
 ```
